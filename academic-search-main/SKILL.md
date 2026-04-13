@@ -196,7 +196,7 @@ curl -s "https://api.semanticscholar.org/graph/v1/paper/ARXIV:{arxiv_id}?fields=
 1. 用 `scripts/fulltext_fetcher.py` 在 `body_text` 缺失时按 `pdf_url` 抽取全文
 2. 用 `scripts/fulltext_pg_store.py` 连接 PostgreSQL 并确保目标表存在
 3. 将每篇论文按固定格式拼接后编码为 UTF-8 bytes
-4. 通过 `ON CONFLICT (paper_id)` 执行幂等 UPSERT
+4. 通过 `ON CONFLICT ("key")` 执行幂等 UPSERT（`key` 存 `paper_id`）
 
 集成示例见 `scripts/integrate_fulltext_pipeline.py`。
 

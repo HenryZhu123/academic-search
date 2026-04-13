@@ -226,8 +226,8 @@ psql -U squai_user -d squai_db -f sql/create_squai_table.sql
 
 ```sql
 CREATE TABLE IF NOT EXISTS squai_table (
-    paper_id VARCHAR PRIMARY KEY,
-    paper_content BYTEA NOT NULL
+    "key" VARCHAR PRIMARY KEY,
+    "value" BYTEA NOT NULL
 );
 ```
 

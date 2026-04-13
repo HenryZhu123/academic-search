@@ -22,16 +22,16 @@ LOGGER = logging.getLogger(__name__)
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS squai_table (
-    paper_id VARCHAR PRIMARY KEY,
-    paper_content BYTEA NOT NULL
+    "key" VARCHAR PRIMARY KEY,
+    "value" BYTEA NOT NULL
 );
 """
 
 UPSERT_SQL = """
-INSERT INTO squai_table (paper_id, paper_content)
+INSERT INTO squai_table ("key", "value")
 VALUES (%s, %s)
-ON CONFLICT (paper_id)
-DO UPDATE SET paper_content = EXCLUDED.paper_content;
+ON CONFLICT ("key")
+DO UPDATE SET "value" = EXCLUDED."value";
 """
 
 
@@ -140,16 +140,16 @@ class PaperContentStore:
         """
         self._require_connection()
         assert self._conn is not None
-        ids: list[str] = []
+        paper_ids: list[str] = []
         try:
             with self._conn.cursor() as cur:
                 for paper in papers:
                     paper_id = resolve_paper_id(paper)
                     text_bytes = build_content_bytes(paper)
                     cur.execute(UPSERT_SQL, (paper_id, psycopg2.Binary(text_bytes)))
-                    ids.append(paper_id)
+                    paper_ids.append(paper_id)
             self._conn.commit()
-            return ids
+            return paper_ids
         except Exception:
             self._conn.rollback()
             LOGGER.exception("Batch upsert failed.")
@@ -183,11 +183,15 @@ def build_content_bytes(paper: Mapping[str, Any]) -> bytes:
 def resolve_paper_id(paper: Mapping[str, Any]) -> str:
     """
     Resolve deterministic paper_id.
-    Priority: explicit paper_id -> DOI -> arXiv ID -> hash(title+year).
+    Priority: explicit paper_id/doc_id -> DOI -> arXiv ID -> hash(title+year).
     """
     explicit = paper.get("paper_id")
     if explicit:
         return str(explicit)
+
+    explicit_doc = paper.get("doc_id")
+    if explicit_doc:
+        return str(explicit_doc)
 
     doi = paper.get("doi")
     if doi:
@@ -200,7 +204,7 @@ def resolve_paper_id(paper: Mapping[str, Any]) -> str:
     title = str(paper.get("title") or "").strip()
     year = str(paper.get("year") or "").strip()
     if not title:
-        raise ValueError("Cannot resolve paper_id: missing paper_id/doi/arxiv_id/title.")
+        raise ValueError("Cannot resolve paper_id: missing paper_id/doc_id/doi/arxiv_id/title.")
     digest = hashlib.sha256(f"{title}|{year}".encode("utf-8")).hexdigest()[:24]
     return f"titlehash:{digest}"
 
