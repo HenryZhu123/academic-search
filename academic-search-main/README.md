@@ -206,7 +206,7 @@ academic-search/
 
 - `scripts/fulltext_pg_store.py`：数据库连接工具类 + 建表 + UPSERT + 事务/异常处理
 - `scripts/fulltext_fetcher.py`：从 `pdf_url` 下载 PDF 并抽取 `body_text`
-- `scripts/integrate_fulltext_pipeline.py`：与现有检索流程的低侵入集成示例
+- `scripts/integrate_fulltext_pipeline.py`：真实多篇检索（arXiv）+ 全文抽取 + 入库流水线
 - `sql/create_squai_table.sql`：建表 SQL
 - `requirements-fulltext.txt`：新增 Python 依赖
 
@@ -270,7 +270,11 @@ with PaperContentStore(cfg) as store:
     store.upsert_many(normalized)
 ```
 
-完整可运行示例见：`scripts/integrate_fulltext_pipeline.py`。
+执行真实多篇检索并入库：
+
+```bash
+python scripts/integrate_fulltext_pipeline.py --query "graph neural network" --limit 20
+```
 
 ---
 
