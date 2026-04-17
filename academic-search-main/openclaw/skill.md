@@ -16,7 +16,28 @@ python scripts/integrate_fulltext_pipeline.py --query "{query}" --limit {limit}
 
 ---
 
-## 2) Execution Contract
+## 2) When to Call
+
+满足以下任一条件时，必须调用本 skill：
+
+1. 用户明确指定要使用 `academic-search`（如："用 academic-search 查..."、"必须走 academic-search skill"）
+2. 用户提出论文检索需求，且目标是某个方向/主题相关论文（如："检索多模态学习相关论文"、"找癌症早筛相关文献"）
+3. 用户要求返回论文摘要、并希望结果可入库或可追踪
+
+典型触发意图关键词（中文/英文）：
+
+- 检索/搜索/查找/调研 + 论文/文献
+- related papers / literature search / survey papers
+- 某领域 "相关论文"、"最新论文"、"综述文献"
+
+以下场景不调用本 skill：
+
+- 仅做概念解释，不需要检索真实论文
+- 用户只要求润色文本、翻译、写作，不涉及论文检索
+
+---
+
+## 3) Execution Contract
 
 ### Tool Input
 
@@ -27,7 +48,7 @@ python scripts/integrate_fulltext_pipeline.py --query "{query}" --limit {limit}
 
 执行命令时的工作目录必须是项目根目录：
 
-`D:/academic-search-main/academic-search-main`
+`/home/ubuntu/academic-search/academic-search-main`
 
 ### Environment Variables
 
@@ -39,13 +60,11 @@ python scripts/integrate_fulltext_pipeline.py --query "{query}" --limit {limit}
 - `SQUAI_DB_HOST`
 - `SQUAI_DB_PORT`
 
-可选 API Key（推荐）：
 
-- `S2_API_KEY`（Semantic Scholar 提升限流配额）
 
 ---
 
-## 3) Runtime Behavior
+## 4) Runtime Behavior
 
 每次调用必须遵循以下流程：
 
@@ -53,12 +72,11 @@ python scripts/integrate_fulltext_pipeline.py --query "{query}" --limit {limit}
 2. 若用户未指定数量，设置 `limit=10`
 3. 调用 Python 脚本
 4. 解析脚本 stdout 返回的 JSON 结果
-5. 将摘要结果展示给用户
-6. 告知入库状态（`stored_paper_ids`）
+5. 将摘要结果总结后展示给用户
 
 ---
 
-## 4) Expected Script Output (JSON)
+## 5) Expected Script Output (JSON)
 
 脚本返回 JSON，结构如下：
 
@@ -81,19 +99,18 @@ python scripts/integrate_fulltext_pipeline.py --query "{query}" --limit {limit}
 
 ---
 
-## 5) Response Policy to User
+## 6) Response Policy to User
 
 调用成功后，按以下格式回答：
 
 1. 简要说明检索条件（query、limit）
-2. 输出论文摘要列表（标题 + 年份 + 来源平台 + 摘要）
-3. 输出入库结果（写入条数与部分 paper_id）
+2. 输出论文摘要列表（标题 + 年份 + 来源平台 + 摘要总结）
 
 建议输出模板：
 
 - 已检索：`{query}`（limit=`{limit}`）
 - 命中：`{count}` 篇
-- 入库：`{len(stored_paper_ids)}` 条到 `squai_table`
+- 论文列表：标题 + 年份 + 来源平台 + 摘要总结
 
 当 `count=0` 时：
 
@@ -102,7 +119,7 @@ python scripts/integrate_fulltext_pipeline.py --query "{query}" --limit {limit}
 
 ---
 
-## 6) Failure Handling
+## 7) Failure Handling
 
 当脚本执行失败时：
 
@@ -119,7 +136,7 @@ python scripts/integrate_fulltext_pipeline.py --query "{query}" --limit {limit}
 
 ---
 
-## 7) Command Examples
+## 8) Command Examples
 
 ### Example A
 
@@ -135,7 +152,7 @@ python scripts/integrate_fulltext_pipeline.py --query "single-cell RNA sequencin
 
 ---
 
-## 8) Safety and Constraints
+## 9) Safety and Constraints
 
 - 只使用公开 API，不绕过付费墙
 - 不输出非结构化原始 HTML
@@ -144,12 +161,16 @@ python scripts/integrate_fulltext_pipeline.py --query "single-cell RNA sequencin
 
 ---
 
-## 9) OpenClaw System Prompt Snippet (Optional)
+## 10) OpenClaw System Prompt Snippet (Optional)
 
 可在 OpenClaw 中加入以下行为约束：
 
 ```text
-When user asks to retrieve academic papers, call:
+Call this skill when:
+- user explicitly asks to use academic-search
+- user asks to retrieve/search related papers in any research topic
+
+Execution command:
 python scripts/integrate_fulltext_pipeline.py --query "{query}" --limit {limit}
 
 Always parse JSON output and reply with:
