@@ -321,15 +321,25 @@ def collect_multi_platform_papers(query: str, limit: int) -> list[dict[str, Any]
 def persist_full_results(papers: Iterable[dict[str, Any]]) -> list[str]:
     cfg = PostgresConfig.from_env()
     stored_ids: list[str] = []
+    skipped_no_pdf = 0
     with PaperContentStore(cfg) as store:
         store.ensure_table()
         for paper in papers:
+            pdf_url = _clean_text(str(paper.get("pdf_url") or ""))
+            if not pdf_url:
+                skipped_no_pdf += 1
+                continue
             enriched = enrich_paper_with_body_text(paper)
             enriched["fetched_at"] = date.today().isoformat()
             paper_id = resolve_paper_id(enriched)
             payload_bytes = json.dumps(enriched, ensure_ascii=False).encode("utf-8")
             store.upsert_content(paper_id, payload_bytes)
             stored_ids.append(paper_id)
+    LOGGER.info(
+        "Persisted %d papers with valid pdf_url; skipped %d papers without pdf_url.",
+        len(stored_ids),
+        skipped_no_pdf,
+    )
     return stored_ids
 
 
