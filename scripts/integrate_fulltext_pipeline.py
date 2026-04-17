@@ -13,7 +13,7 @@ import re
 import xml.etree.ElementTree as ET
 from argparse import ArgumentParser
 from datetime import date, timedelta
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 import requests
 
@@ -27,6 +27,10 @@ PUBMED_EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 S2_SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 BIORXIV_DETAILS_URL = "https://api.biorxiv.org/details/biorxiv"
 USER_AGENT = "academic-search-fulltext-pipeline/2.0"
+
+
+def _has_valid_pdf_url(paper: Mapping[str, Any]) -> bool:
+    return bool(_clean_text(str(paper.get("pdf_url") or "")))
 
 
 def _to_year(value: str | None) -> int | None:
@@ -281,7 +285,12 @@ def _merge_paper(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str
     return merged
 
 
-def collect_multi_platform_papers(query: str, limit: int) -> list[dict[str, Any]]:
+def collect_multi_platform_papers(
+    query: str,
+    limit: int,
+    *,
+    require_pdf_url: bool = False,
+) -> list[dict[str, Any]]:
     providers = [
         ("pubmed", search_pubmed_papers),
         ("biorxiv", search_biorxiv_papers),
@@ -307,6 +316,8 @@ def collect_multi_platform_papers(query: str, limit: int) -> list[dict[str, Any]
                 merged[key] = created
 
     all_papers = list(merged.values())
+    if require_pdf_url:
+        all_papers = [paper for paper in all_papers if _has_valid_pdf_url(paper)]
     all_papers.sort(
         key=lambda p: (
             int(p.get("year") or 0),
@@ -316,6 +327,49 @@ def collect_multi_platform_papers(query: str, limit: int) -> list[dict[str, Any]
         reverse=True,
     )
     return all_papers[:limit]
+
+
+def collect_target_papers_with_pdf(
+    query: str,
+    limit: int,
+    max_attempts: int = 5,
+) -> list[dict[str, Any]]:
+    """
+    Expand retrieval window until we collect enough papers with valid pdf_url.
+    """
+    target = max(1, limit)
+    base_window = max(target * 2, 10)
+    papers: list[dict[str, Any]] = []
+
+    for attempt in range(1, max_attempts + 1):
+        window_limit = base_window * attempt
+        papers = collect_multi_platform_papers(
+            query,
+            limit=window_limit,
+            require_pdf_url=True,
+        )
+        if len(papers) >= target:
+            LOGGER.info(
+                "Collected %d papers with valid pdf_url (target=%d, attempt=%d).",
+                len(papers),
+                target,
+                attempt,
+            )
+            return papers[:target]
+        LOGGER.info(
+            "Attempt %d/%d: collected %d papers with valid pdf_url, below target=%d.",
+            attempt,
+            max_attempts,
+            len(papers),
+            target,
+        )
+
+    LOGGER.warning(
+        "Reached max attempts; only %d papers with valid pdf_url found (target=%d).",
+        len(papers),
+        target,
+    )
+    return papers[:target]
 
 
 def persist_full_results(papers: Iterable[dict[str, Any]]) -> list[str]:
@@ -350,7 +404,7 @@ def run_pipeline(query: str, limit: int = 10) -> dict[str, Any]:
     2) collect abstracts for response
     3) persist full payloads to squai_table
     """
-    papers = collect_multi_platform_papers(query, limit=limit)
+    papers = collect_target_papers_with_pdf(query, limit=limit)
     if not papers:
         return {"query": query, "count": 0, "abstracts": [], "stored_paper_ids": []}
 
